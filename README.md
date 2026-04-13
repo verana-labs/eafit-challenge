@@ -40,10 +40,10 @@ In this challenge, you will build a web platform that allows **anyone** — with
 
 ### What You Will Deliver
 
-1. **Custom test chatbot** — an AI bot running on Hologram (Step 1)
+1. **Custom test chatbot** — an AI bot running on Hologram (Step 1, in your fork of `eafit-challenge-agent-example`)
 2. **Bot deployed on Kubernetes** — your chatbot publicly accessible (Step 2)
-3. **"Persona AI Agent Creator" web platform** — a complete web application that allows non-technical users to create and manage their own personal AI agents (Step 3)
-4. **Code published on GitHub** — in your fork of the `verana-labs/eafit-challenge` repository, under an open-source license
+3. **"Persona AI Agent Creator" web platform** — a complete web application that allows non-technical users to create and manage their own personal AI agents (Step 3, in your fork of `eafit-challenge`)
+4. **Code published on GitHub** — under an open-source license
 5. **Documentation** — README with installation and usage instructions
 
 ---
@@ -76,9 +76,9 @@ git --version
 # Should show something like: git version 2.x.x
 ```
 
-### Node.js and pnpm
+### Node.js and pnpm (for Step 3)
 
-The project uses **Node.js** (JavaScript runtime) and **pnpm** (package manager).
+You will need **Node.js** (JavaScript runtime) and **pnpm** (package manager) for the web application in Step 3.
 
 1. Install Node.js **v20 or higher**: https://nodejs.org (download the LTS version)
 2. Install pnpm:
@@ -154,10 +154,11 @@ kubectl version --client
 
 | Repository | Description |
 |------------|-------------|
-| [verana-labs/eafit-challenge](https://github.com/verana-labs/eafit-challenge) | **Your working repository** — contains the chatbot base code, k8s deployment scripts, and templates |
+| [verana-labs/eafit-challenge](https://github.com/verana-labs/eafit-challenge) | **Challenge instructions** — this repository with setup guides and challenge steps |
+| [verana-labs/eafit-challenge-agent-example](https://github.com/verana-labs/eafit-challenge-agent-example) | **Example agent** — fork this to build your first chatbot (Step 1) |
 | [2060-io/hologram-generic-ai-agent-vs](https://github.com/2060-io/hologram-generic-ai-agent-vs) | Generic AI agent for Hologram (chatbot upstream) |
+| [2060-io/hologram-verifiable-services](https://github.com/2060-io/hologram-verifiable-services) | More agent examples (GitHub Agent, Wise Agent, etc.) |
 | [verana-labs/vs-agent](https://github.com/verana-labs/vs-agent) | VS Agent — framework for building Verifiable Services with Hologram |
-| [verana-labs/verana-demos](https://github.com/verana-labs/verana-demos) | Demos and scripts for the Verana ecosystem |
 
 ### Reference Documentation
 
@@ -179,8 +180,8 @@ Make sure you have everything listed in the previous section installed:
 - [ ] Code editor (VS Code, Windsurf, or Cursor)
 - [ ] Git
 - [ ] GitHub account
-- [ ] Node.js v20+
-- [ ] pnpm
+- [ ] Node.js v20+ (for Step 3)
+- [ ] pnpm (for Step 3)
 - [ ] Docker Desktop
 - [ ] ngrok (with account and token configured)
 - [ ] Hologram Messaging on your phone
@@ -255,7 +256,7 @@ ollama pull llama3
 
 For Step 2, you will need a `kubeconfig` file that gives you access to a namespace on the Verana Kubernetes cluster.
 
-**Request your credentials on the Discord channel** (see next section). You will be assigned a namespace in the format: `eafit-YOURNAME`.
+**Request your credentials on the Discord channel** (see next section). You will be assigned a namespace for your team.
 
 ---
 
@@ -290,18 +291,21 @@ Join the Verana Discord server and use the **#eafit-challenge** channel to:
 - Configuration of prompts, RAG, and agent packs
 - How communication with Hologram works through VS Agent
 - Docker Compose for orchestrating multiple services
+- How a Verifiable Service obtains a Service credential from the organization
 
 **What you will deliver**:
 - A custom chatbot running locally, accessible from Hologram
 
 ---
 
-### 1.1. Fork the repository
+### 1.1. Fork the example agent repository
 
-1. Go to https://github.com/verana-labs/eafit-challenge
+The example agent lives in a separate repository. You will fork it and use it as a starting point.
+
+1. Go to https://github.com/verana-labs/eafit-challenge-agent-example
 2. Click the **"Fork"** button (top-right corner)
 3. Select your personal account as the destination
-4. This will create a copy of the repository at `https://github.com/YOUR-USERNAME/eafit-challenge`
+4. This will create a copy at `https://github.com/YOUR-USERNAME/eafit-challenge-agent-example`
 
 ### 1.2. Clone the repository to your machine
 
@@ -309,15 +313,15 @@ Open your terminal and run:
 
 ```bash
 # Replace YOUR-USERNAME with your GitHub username
-git clone git@github.com:YOUR-USERNAME/eafit-challenge.git
+git clone git@github.com:YOUR-USERNAME/eafit-challenge-agent-example.git
 
 # Enter the directory
-cd eafit-challenge
+cd eafit-challenge-agent-example
 ```
 
 > If you didn't set up SSH, you can use HTTPS instead:
 > ```bash
-> git clone https://github.com/YOUR-USERNAME/eafit-challenge.git
+> git clone https://github.com/YOUR-USERNAME/eafit-challenge-agent-example.git
 > ```
 
 ### 1.3. Explore the project structure
@@ -332,240 +336,126 @@ windsurf .  # for Windsurf
 cursor .    # for Cursor
 ```
 
-Navigate to the `ai-chatbot/` directory. This directory contains the chatbot code based on [hologram-generic-ai-agent-vs](https://github.com/2060-io/hologram-generic-ai-agent-vs). You will find:
+The example agent is built with [hologram-generic-ai-agent-vs](https://github.com/2060-io/hologram-generic-ai-agent-vs). You can find other agent examples in [hologram-verifiable-services](https://github.com/2060-io/hologram-verifiable-services).
+
+The repository structure:
 
 ```
-ai-chatbot/
-├── agent-packs/           # Declarative agent configurations
-│   └── my-agent/          # Your custom configuration
-│       └── agent-pack.yaml
-├── docs/                  # Documents for RAG (knowledge base)
-├── docker-compose.yml     # Orchestration of all services
-├── .env.example           # Environment variables template
-├── Dockerfile             # To build the chatbot image
-└── README.md              # Chatbot-specific instructions
+eafit-challenge-agent-example/
+├── config.env              # Service configuration (ports, org URLs, credDef, etc.)
+├── agent-pack.yaml         # Agent personality, prompts, menus, MCP config
+├── deployment.yaml         # Helm chart values for K8s deployment (Step 2)
+├── common/
+│   └── common.sh           # Shared shell helpers
+├── docker/
+│   └── docker-compose.yml  # Orchestration of all services
+├── scripts/
+│   ├── setup.sh            # Local setup (VS Agent + ngrok + Service credential)
+│   └── start.sh            # Start the Docker Compose stack
+├── docs/
+│   └── README.md           # User-facing guide
+└── .github/
+    └── workflows/
+        └── deploy.yml      # GitHub Actions workflow for K8s deployment (Step 2)
 ```
 
 ### 1.4. Configure environment variables
 
-Copy the example file and edit it:
+Open `config.env` in your editor. All defaults are preconfigured to work with the EAFIT Challenge infrastructure:
 
-```bash
-cd ai-chatbot
-cp .env.example .env
-```
+- The **organization** is already set to `organization.eafit.testnet.verana.network`
+- The **credential definition** is hardcoded to the EAFIT Avatar's credDef
+- The **VS Agent image** and **ports** are ready to use
 
-Open `.env` in your editor and configure at least the following variables:
-
-```env
-# === LLM Provider ===
-# Option A: OpenAI (requires API key)
-LLM_PROVIDER=openai
-OPENAI_API_KEY=sk-your-api-key-here
-OPENAI_MODEL=gpt-4o-mini
-
-# Option B: Ollama (local, free)
-# LLM_PROVIDER=ollama
-# OLLAMA_ENDPOINT=http://ollama:11435
-# OLLAMA_MODEL=llama3
-
-# === Agent Pack ===
-AGENT_PACK_PATH=./agent-packs/my-agent
-
-# === Redis (for chatbot memory) ===
-REDIS_URL=redis://redis:6379
-AGENT_MEMORY_BACKEND=redis
-AGENT_MEMORY_WINDOW=8
-
-# === Vector Store (for RAG) ===
-VECTOR_STORE=redis
-VECTOR_INDEX_NAME=eafit-chatbot
-RAG_PROVIDER=vectorstore
-RAG_DOCS_PATH=/app/rag/docs
-
-# === VS Agent (communication with Hologram) ===
-VS_AGENT_ADMIN_URL=http://vs-agent:3001
-EVENTS_BASE_URL=http://chatbot:3000
-
-# === PostgreSQL ===
-POSTGRES_HOST=postgres
-POSTGRES_USER=eafit
-POSTGRES_PASSWORD=eafit2025
-POSTGRES_DB_NAME=chatbot-agent
-
-# === Application ===
-APP_PORT=3000
-LOG_LEVEL=3
-```
+> If you don't want to use OpenAI, you can configure any other LLM provider. Refer to the [agent pack schema](https://github.com/2060-io/hologram-generic-ai-agent-vs/blob/main/docs/agent-pack-schema.md) for available options (Ollama, Anthropic, etc.).
 
 ### 1.5. Customize your Agent Pack
 
-The `agent-pack.yaml` file defines the personality, languages, prompt, and behavior of your chatbot. Edit `ai-chatbot/agent-packs/my-agent/agent-pack.yaml`:
+The `agent-pack.yaml` file defines the personality, languages, prompt, menus, and MCP tools of your chatbot. Open it in your editor and customize:
 
-```yaml
-metadata:
-  id: eafit-my-agent
-  displayName: My EAFIT Agent
-  description: >-
-    Custom AI agent created by [YOUR NAME] for the EAFIT challenge.
-  defaultLanguage: en
-  tags:
-    - eafit
-    - challenge
+- **`metadata`** — Agent name, description, and tags
+- **`languages`** — Greeting messages and system prompts (en, es)
+- **`llm`** — Model, temperature, and agent prompt
+- **`rag`** — Knowledge base configuration
+- **`flows`** — Authentication and menu behavior
+- **`mcp`** — External tool integrations (e.g., GitHub)
 
-languages:
-  en:
-    greetingMessage: >-
-      Hi! 👋 I'm your EAFIT AI assistant. How can I help you today?
-    systemPrompt: >-
-      You are a friendly and professional AI assistant. You answer questions
-      clearly and concisely.
-    strings:
-      ROOT_TITLE: 'Welcome!'
-      ERROR_MESSAGES: 'Service unavailable. Please try again later.'
-  es:
-    greetingMessage: >-
-      ¡Hola! 👋 Soy tu asistente IA de EAFIT. ¿En qué puedo ayudarte hoy?
-    systemPrompt: >-
-      Eres un asistente IA amigable y profesional. Respondes preguntas de
-      manera clara y concisa.
-    strings:
-      ROOT_TITLE: '¡Bienvenido!'
-      ERROR_MESSAGES: 'El servicio no está disponible. Intenta más tarde.'
-
-llm:
-  provider: ${LLM_PROVIDER}
-  model: ${OPENAI_MODEL}
-  temperature: 0.3
-  maxTokens: 1000
-
-rag:
-  provider: vectorstore
-  docsPath: ./docs
-  chunkSize: 1000
-  chunkOverlap: 200
-  vectorStore:
-    type: redis
-    indexName: eafit-chatbot
-
-memory:
-  backend: redis
-  window: 8
-  redisUrl: ${REDIS_URL}
-
-flows:
-  welcome:
-    enabled: true
-    sendOnProfile: true
-    templateKey: greetingMessage
-
-integrations:
-  vsAgent:
-    adminUrl: ${VS_AGENT_ADMIN_URL}
-  postgres:
-    host: ${POSTGRES_HOST}
-    user: ${POSTGRES_USER}
-    password: ${POSTGRES_PASSWORD}
-    dbName: ${POSTGRES_DB_NAME}
-```
-
-> **Customize it**: Change the agent name, greeting messages, system prompt, languages, etc. Make it yours!
+> **Make it yours!** Change the agent name, greeting messages, system prompt, languages, etc.
 
 ### 1.6. Add documents for RAG (knowledge base)
 
-If you want your chatbot to answer questions about specific topics, place files in the `ai-chatbot/docs/` directory. Supported formats:
+If you want your chatbot to answer questions about specific topics, you can add remote document URLs in the `rag.remoteUrls` section of `agent-pack.yaml`. Supported formats:
 
 - `.txt` — plain text
 - `.md` — markdown
 - `.pdf` — PDF documents
 - `.csv` — tabular data
 
-Example: you can add information about EAFIT, your major, or any topic of interest.
+Example: add URLs to documents about EAFIT, your major, or any topic of interest.
 
-### 1.7. Start the chatbot with Docker Compose
+### 1.7. Set up the VS Agent
 
-Make sure Docker Desktop is running, then:
+The setup script deploys the VS Agent locally via Docker + ngrok, and obtains a **Service credential** from the EAFIT organization (proving your agent is a legitimate service in the ecosystem).
+
+Make sure Docker Desktop and ngrok are running, then:
 
 ```bash
-cd ai-chatbot
-docker compose up --build
+source config.env
+./scripts/setup.sh
 ```
 
-This will start several services:
+The script will:
+
+1. **Pull and start the VS Agent container** (DIDComm messaging)
+2. **Start an ngrok tunnel** to expose the agent publicly
+3. **Obtain a Service credential** from the EAFIT organization at `organization.eafit.testnet.verana.network`
+
+> The first time may take a few minutes while Docker images are downloaded.
+
+### 1.8. Start the full stack
+
+Once setup is complete, start all services (chatbot, Redis, PostgreSQL):
+
+```bash
+export NGROK_DOMAIN=<your-ngrok-domain>   # shown by setup.sh
+export OPENAI_API_KEY=sk-...              # your LLM API key
+./scripts/start.sh
+```
+
+This will start:
 
 | Service | Port | Description |
 |---------|------|-------------|
-| **chatbot** | 3000 | Your AI agent (API) |
-| **vs-agent** | 3001 | Communication service with Hologram (DIDComm) |
+| **vs-agent** | 3011 (public), 3010 (admin) | Communication with Hologram (DIDComm) |
+| **chatbot** | 3003 | Your AI agent (LLM, RAG, MCP) |
 | **redis** | 6379 | Memory and vector storage |
 | **postgres** | 5432 | Session database |
-
-> The first time will take a few minutes while Docker images are downloaded.
 
 Verify everything is running:
 
 ```bash
-docker compose ps
+docker compose -f docker/docker-compose.yml ps
 ```
 
 All services should show status `Up` or `running`.
 
-### 1.8. Expose your service with ngrok
+### 1.9. Connect with Hologram and test
 
-For Hologram to connect to your local chatbot, you need to expose the VS Agent port:
-
-```bash
-# In a new terminal
-ngrok http 3001
-```
-
-ngrok will display a public URL like:
-
-```
-Forwarding  https://abc123.ngrok-free.app -> http://localhost:3001
-```
-
-**Copy that URL** (the one starting with `https://`). You will need it to configure the VS Agent endpoint.
-
-Now update your `.env` with the ngrok URL:
-
-```env
-AGENT_ENDPOINT=https://abc123.ngrok-free.app
-```
-
-And restart the services:
-
-```bash
-docker compose down
-docker compose up --build
-```
-
-### 1.9. Get the invitation credentials
-
-Once the VS Agent is running and exposed via ngrok, you need to get the invitation URL to connect with Hologram.
-
-Access the VS Agent API to get the invitation:
-
-```bash
-curl http://localhost:3001/
-```
-
-This displays a QR code that you can scan with Hologram.
-
-### 1.10. Connect with Hologram and test
-
-1. Open the **Hologram Messaging** app on your phone
-2. Scan the invitation QR code (or use the URL)
-3. The chatbot will send you its greeting message
-4. Start chatting and verify it responds correctly!
+1. Open a browser and go to `http://localhost:3011/` — this shows the VS Agent invitation page with a QR code
+2. Open the **Hologram Messaging** app on your phone
+3. Scan the QR code
+4. The chatbot will send you its greeting message
+5. Open the menu and tap **Authenticate** to verify your identity with the EAFIT Avatar credential
+6. Start chatting!
 
 **Experiment**:
 - Change the prompt in `agent-pack.yaml` and restart
-- Add more documents to `docs/` to enrich the RAG
-- Try different LLM models
+- Add more documents for RAG
+- Try different LLM models or providers
 - Change the default language
+- Add or modify MCP tool integrations
 
-### 1.11. Commit your changes
+### 1.10. Commit your changes
 
 Once your chatbot is working, save your changes:
 
@@ -582,128 +472,92 @@ git push origin main
 **Goal**: Learn how to deploy your chatbot to a Kubernetes cluster so it is publicly accessible without relying on ngrok or your local machine.
 
 **What you will learn**:
-- Basic Kubernetes concepts (pods, deployments, services, ingress)
-- Configuration with YAML manifests
-- Deployment to a real cluster with kubectl
+- Basic Kubernetes concepts (pods, services, ingress)
+- Helm charts for packaging deployments
+- GitHub Actions for CI/CD
+- GitHub Secrets for managing sensitive configuration
 
 **What you will deliver**:
-- Your chatbot deployed and publicly accessible at `yourname.eafit.testnet.verana.network`
+- Your chatbot deployed and publicly accessible at `https://<agentname>.agents.<team_name>.teams.eafit.testnet.verana.network`
 
 ---
 
-### 2.1. Verify your Kubernetes credentials
+### 2.1. Update your agent's public URL
 
-You should have received a `kubeconfig` file from the Verana team (requested in Step 3.5 of the setup). This file gives you access to your namespace on the cluster.
-
-Configure kubectl to use your kubeconfig:
+Open `config.env` in your forked `eafit-challenge-agent-example` repository and set your `AGENT_PUBLIC_URL` following the naming convention:
 
 ```bash
-# Option A: environment variable (recommended)
+AGENT_PUBLIC_URL="https://<agentname>.agents.<team_name>.teams.eafit.testnet.verana.network"
+```
+
+Replace `<agentname>` with your agent's name and `<team_name>` with your team's name.
+
+Also update the ingress host in `deployment.yaml` to match:
+
+```yaml
+ingress:
+  host: "<agentname>.agents.<team_name>.teams.eafit.testnet.verana.network"
+```
+
+### 2.2. Configure GitHub Secrets
+
+In your forked repository, go to **Settings → Secrets and variables → Actions** and add the following secrets:
+
+| Secret | Description |
+|--------|-------------|
+| `OVH_KUBECONFIG` | Kubeconfig for the K8s cluster (provided by the Verana team) |
+| `K8S_NAMESPACE` | Your team's namespace (use your team name) |
+| `EXAMPLE_AGENT_OPENAI_API_KEY` | Your OpenAI API key (or other LLM provider key) |
+| `EXAMPLE_AGENT_POSTGRES_PASSWORD` | PostgreSQL password (any secure string) |
+| `EXAMPLE_AGENT_MCP_CONFIG_ENCRYPTION_KEY` | Generate with `openssl rand -hex 32` |
+| `EXAMPLE_AGENT_WALLET_KEY` | Generate with `openssl rand -base64 32` |
+| `EXAMPLE_AGENT_VSAGENT_DB_PASSWORD` | VS Agent DB password (any secure string) |
+
+> **Request your kubeconfig** on the Verana Discord (#eafit-challenge channel) if you haven't already.
+
+### 2.3. Deploy with GitHub Actions
+
+The repository includes a GitHub Actions workflow at `.github/workflows/deploy.yml` that handles deployment automatically.
+
+1. Go to the **Actions** tab in your forked repository
+2. Select the **"Deploy Example Agent"** workflow
+3. Click **"Run workflow"**
+4. Select step **`all`** to deploy and obtain credentials in one run
+
+The workflow will:
+
+1. **Deploy** your agent to the K8s cluster using Helm
+2. **Obtain a Service credential** from the EAFIT organization (same as the local setup)
+
+### 2.4. Verify the deployment
+
+Once the workflow completes successfully:
+
+```bash
+# Optional: verify locally with kubectl
 export KUBECONFIG=~/path/to/your/kubeconfig.yaml
-
-# Option B: copy to the default directory
-cp ~/path/to/your/kubeconfig.yaml ~/.kube/config
-```
-
-Verify the connection:
-
-```bash
-kubectl get pods
-# Should show a list (possibly empty) with no errors
-```
-
-### 2.2. Analyze the deployment scripts
-
-In your repository, navigate to the `k8s/` directory. You will find Kubernetes YAML manifests:
-
-```
-k8s/
-├── deployment.yaml      # Defines the pods (containers) for your chatbot
-├── service.yaml         # Exposes pods within the cluster
-├── ingress.yaml         # Configures public access (domain)
-├── configmap.yaml       # Configuration variables
-├── secrets.yaml         # Sensitive data (API keys)
-└── deploy.sh            # Script to deploy everything at once
-```
-
-### 2.3. Customize the configuration
-
-Edit the YAML files to customize your deployment:
-
-**`configmap.yaml`** — Environment variables for your chatbot:
-
-```yaml
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: chatbot-config
-  namespace: eafit-YOURNAME
-data:
-  LLM_PROVIDER: "openai"
-  OPENAI_MODEL: "gpt-4o-mini"
-  AGENT_PACK_PATH: "./agent-packs/my-agent"
-  # ... more variables as needed
-```
-
-**`secrets.yaml`** — API keys and passwords (base64-encoded):
-
-```yaml
-apiVersion: v1
-kind: Secret
-metadata:
-  name: chatbot-secrets
-  namespace: eafit-YOURNAME
-type: Opaque
-data:
-  OPENAI_API_KEY: c2stdHUtYXBpLWtleQ==  # echo -n "your-api-key" | base64
-```
-
-**`ingress.yaml`** — Your public domain:
-
-```yaml
-# Make sure the host points to your subdomain
-spec:
-  rules:
-    - host: myagent.yourname.eafit.testnet.verana.network
-```
-
-### 2.4. Deploy
-
-Run the deployment script or apply the manifests manually:
-
-```bash
-# Option A: use the script
-cd k8s
-chmod +x deploy.sh
-./deploy.sh
-
-# Option B: apply manually
-kubectl apply -f k8s/
-```
-
-Verify that pods are running:
-
-```bash
-kubectl get pods -n eafit-YOURNAME
+kubectl get pods -n <your-namespace>
 # Should show STATUS: Running
-
-kubectl get ingress -n eafit-YOURNAME
-# Should show your configured domain
 ```
 
-### 2.5. Test the deployment
+Your agent's DID document should be accessible at:
 
-Once the pods are in `Running` status:
+```
+https://<agentname>.agents.<team_name>.teams.eafit.testnet.verana.network/.well-known/did.json
+```
 
-1. Open Hologram Messaging
-2. Scan the QR or access the invitation URL of your deployed bot (you no longer need ngrok)
-3. Verify the chatbot responds correctly
+### 2.5. Test with Hologram
+
+1. Open **Hologram Messaging** on your phone
+2. Navigate to your agent's public URL — it will show a QR code
+3. Scan the QR code to connect
+4. Verify the chatbot responds correctly (you no longer need ngrok!)
 
 ### 2.6. Commit and push
 
 ```bash
 git add .
-git commit -m "feat: add k8s deployment configuration"
+git commit -m "feat: configure k8s deployment"
 git push origin main
 ```
 
@@ -748,7 +602,7 @@ Your application must provide:
 A configuration file (`.env` or similar) that defines:
 
 - **kubeconfig**: path to the k8s credentials file for deploying bots to the cluster
-- **Base domain**: suffix for user chatbot URLs, in the format: `name.eafit.testnet.verana.network`
+- **Base domain**: suffix for user chatbot URLs, in the format: `<agentname>.agents.<team_name>.teams.eafit.testnet.verana.network`
 
 #### User Authentication
 
