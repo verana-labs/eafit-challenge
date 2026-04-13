@@ -10,12 +10,13 @@ on:
         options:
           - deploy
           - get-credentials
+          - deploy-chatbot
           - all
         default: all
 
 jobs:
   deploy-avatar:
-    name: Deploy Avatar VS Agent
+    name: Deploy Avatar VS Agent and Chatbot
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -100,9 +101,13 @@ jobs:
       - name: Deploy VS Agent via Helm
         if: inputs.step == 'deploy' || inputs.step == 'all'
         run: |
+          APP_NAME="issuer-chatbot-app"
+          CHATBOT_URL="http://${APP_NAME}:${CHATBOT_PORT:-4000}"
           yq 'del(.chartSource, .chartVersion)' avatar/deployment.yaml > /tmp/helm-values.yaml
           yq -i '.didcommLabel = env(SERVICE_NAME)' /tmp/helm-values.yaml
           yq -i '.didcommInvitationImageUrl = env(SERVICE_LOGO_URL)' /tmp/helm-values.yaml
+          export CHATBOT_URL
+          yq -i '.eventsBaseUrl = env(CHATBOT_URL)' /tmp/helm-values.yaml
           helm upgrade --install "$RELEASE_NAME" "$CHART_SOURCE" \
             --version "$CHART_VERSION" \
             --namespace "$CHART_NAMESPACE" --create-namespace \
@@ -226,6 +231,313 @@ jobs:
             ok "ISSUER permission validated: $ISSUER_PERM"
           fi
 
+          # Create AnonCreds credential definition (if enabled and not already created)
+          if [ "${ENABLE_ANONCREDS}" = "true" ]; then
+            CHILD_PUBLIC_API="http://localhost:${VS_AGENT_PUBLIC_PORT:-3001}"
+            # Port-forward the public port too
+            kubectl port-forward -n "$CHART_NAMESPACE" "svc/$RELEASE_NAME" 3001:3001 &
+            CHILD_PUBLIC_PF_PID=$!
+            sleep 3
+
+            EXISTING_ANONCREDS=$(curl -sf "http://localhost:3001/resources?resourceType=anonCredsCredDef" \
+              | jq -r '. | length' 2>/dev/null || echo "0")
+            if [ "${EXISTING_ANONCREDS:-0}" -gt 0 ]; then
+              ANONCREDS_CRED_DEF_ID=$(curl -sf "http://localhost:3001/resources?resourceType=anonCredsCredDef" \
+                | jq -r '.[0].id // empty' 2>/dev/null || echo "")
+              ok "AnonCreds credential definition already exists: ${ANONCREDS_CRED_DEF_ID} — skipping"
+            else
+              # Find the VTJSC for the custom schema
+              VTJSC_VPR_REF="vpr:verana:${CHAIN_ID}/cs/v1/js/${CUSTOM_SCHEMA_ID}"
+              VTJSC_CRED_ID=$(curl -sf "${CHILD_ADMIN_API}/v1/credentials" \
+                | jq -r --arg ref "$VTJSC_VPR_REF" \
+                  '[.[] | select(.credential.credentialSubject.jsonSchema."$ref" == $ref)][0].id // empty')
+              if [ -z "$VTJSC_CRED_ID" ]; then
+                echo "::error::No VTJSC credential found for schema ref ${VTJSC_VPR_REF}"
+                exit 1
+              fi
+              ANONCREDS_RESULT=$(curl -sf -X POST "${CHILD_ADMIN_API}/v1/anoncreds/credential-definitions" \
+                -H "Content-Type: application/json" \
+                -d "{\"name\": \"${ANONCREDS_NAME}\", \"version\": \"${ANONCREDS_VERSION}\", \"relatedJsonSchemaCredentialId\": \"${VTJSC_CRED_ID}\", \"supportRevocation\": ${ANONCREDS_SUPPORT_REVOCATION}}")
+              ANONCREDS_CRED_DEF_ID=$(echo "$ANONCREDS_RESULT" | jq -r '.id // empty')
+              if [ -z "$ANONCREDS_CRED_DEF_ID" ]; then
+                echo "::error::Failed to create AnonCreds credential definition. Response: $ANONCREDS_RESULT"
+                exit 1
+              fi
+              ok "AnonCreds credential definition created: $ANONCREDS_CRED_DEF_ID"
+            fi
+            echo "ANONCREDS_CRED_DEF_ID=${ANONCREDS_CRED_DEF_ID}" >> "$GITHUB_ENV"
+            kill "$CHILD_PUBLIC_PF_PID" 2>/dev/null || true
+          fi
+
+      # -----------------------------------------------------------------------
+      # DEPLOY-CHATBOT: Deploy Issuer Chatbot service (pre-built image)
+      # -----------------------------------------------------------------------
+      - name: Deploy Issuer Chatbot
+        if: inputs.step == 'deploy-chatbot' || inputs.step == 'all'
+        run: |
+          NAMESPACE="${CHART_NAMESPACE}"
+          APP_NAME="issuer-chatbot-app"
+          IMAGE="${CHATBOT_IMAGE:-io2060/avatar-issuer-chatbot:latest}"
+          PORT="${CHATBOT_PORT:-4000}"
+
+          DB_NAME="issuer-chatbot-db"
+          DB_PASSWORD="${{ secrets.CHATBOT_DB_PASSWORD }}"
+
+          MINIO_NAME="issuer-chatbot-minio"
+          MINIO_AK="${{ secrets.MINIO_ACCESS_KEY }}"
+          MINIO_SK="${{ secrets.MINIO_SECRET_KEY }}"
+          MINIO_BUCKET="avatar-previews"
+          MINIO_PUBLIC_HOST="media.avatar.eafit.testnet.verana.network"
+          if [ -z "$MINIO_AK" ]; then
+            MINIO_AK="$(openssl rand -hex 12)"
+            echo "::warning::MINIO_ACCESS_KEY secret not set — using generated key"
+          fi
+          if [ -z "$MINIO_SK" ]; then
+            MINIO_SK="$(openssl rand -hex 16)"
+            echo "::warning::MINIO_SECRET_KEY secret not set — using generated key"
+          fi
+          if [ -z "$DB_PASSWORD" ]; then
+            DB_PASSWORD="$(openssl rand -hex 16)"
+            echo "::warning::CHATBOT_DB_PASSWORD secret not set — using generated password"
+          fi
+
+          cat <<EOF | kubectl apply -f -
+          apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata:
+            name: ${DB_NAME}-data
+            namespace: ${NAMESPACE}
+          spec:
+            accessModes:
+              - ReadWriteOnce
+            resources:
+              requests:
+                storage: 2Gi
+            storageClassName: csi-cinder-high-speed
+          ---
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: ${DB_NAME}
+            namespace: ${NAMESPACE}
+            labels:
+              app: ${DB_NAME}
+          spec:
+            replicas: 1
+            strategy:
+              type: Recreate
+            selector:
+              matchLabels:
+                app: ${DB_NAME}
+            template:
+              metadata:
+                labels:
+                  app: ${DB_NAME}
+              spec:
+                containers:
+                  - name: postgres
+                    image: postgres:16-alpine
+                    ports:
+                      - containerPort: 5432
+                    env:
+                      - name: POSTGRES_DB
+                        value: chatbot
+                      - name: POSTGRES_USER
+                        value: chatbot
+                      - name: POSTGRES_PASSWORD
+                        value: "${DB_PASSWORD}"
+                      - name: PGDATA
+                        value: /var/lib/postgresql/data/pgdata
+                    volumeMounts:
+                      - name: pgdata
+                        mountPath: /var/lib/postgresql/data
+                    resources:
+                      requests:
+                        cpu: 50m
+                        memory: 128Mi
+                      limits:
+                        cpu: 250m
+                        memory: 256Mi
+                volumes:
+                  - name: pgdata
+                    persistentVolumeClaim:
+                      claimName: ${DB_NAME}-data
+          ---
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: ${DB_NAME}
+            namespace: ${NAMESPACE}
+          spec:
+            selector:
+              app: ${DB_NAME}
+            ports:
+              - port: 5432
+                targetPort: 5432
+          ---
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: ${MINIO_NAME}
+            namespace: ${NAMESPACE}
+            labels:
+              app: ${MINIO_NAME}
+          spec:
+            replicas: 1
+            strategy:
+              type: Recreate
+            selector:
+              matchLabels:
+                app: ${MINIO_NAME}
+            template:
+              metadata:
+                labels:
+                  app: ${MINIO_NAME}
+              spec:
+                containers:
+                  - name: minio
+                    image: minio/minio:latest
+                    args: ["server", "/data", "--console-address", ":9001"]
+                    ports:
+                      - containerPort: 9000
+                      - containerPort: 9001
+                    env:
+                      - name: MINIO_ROOT_USER
+                        value: "${MINIO_AK}"
+                      - name: MINIO_ROOT_PASSWORD
+                        value: "${MINIO_SK}"
+                      - name: MINIO_BROWSER
+                        value: "off"
+                    volumeMounts:
+                      - name: data
+                        mountPath: /data
+                    resources:
+                      requests:
+                        cpu: 25m
+                        memory: 64Mi
+                      limits:
+                        cpu: 200m
+                        memory: 256Mi
+                volumes:
+                  - name: data
+                    emptyDir: {}
+          ---
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: ${MINIO_NAME}
+            namespace: ${NAMESPACE}
+          spec:
+            selector:
+              app: ${MINIO_NAME}
+            ports:
+              - name: api
+                port: 9000
+                targetPort: 9000
+              - name: console
+                port: 9001
+                targetPort: 9001
+          ---
+          apiVersion: networking.k8s.io/v1
+          kind: Ingress
+          metadata:
+            name: ${MINIO_NAME}
+            namespace: ${NAMESPACE}
+            annotations:
+              cert-manager.io/cluster-issuer: letsencrypt-prod
+              nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+          spec:
+            ingressClassName: nginx
+            tls:
+              - hosts:
+                  - ${MINIO_PUBLIC_HOST}
+                secretName: ${MINIO_PUBLIC_HOST}-cert
+            rules:
+              - host: ${MINIO_PUBLIC_HOST}
+                http:
+                  paths:
+                    - path: /
+                      pathType: Prefix
+                      backend:
+                        service:
+                          name: ${MINIO_NAME}
+                          port:
+                            number: 9000
+          ---
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: ${APP_NAME}
+            namespace: ${NAMESPACE}
+            labels:
+              app: ${APP_NAME}
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: ${APP_NAME}
+            template:
+              metadata:
+                labels:
+                  app: ${APP_NAME}
+                annotations:
+                  deploy-timestamp: "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+              spec:
+                containers:
+                  - name: issuer-chatbot
+                    image: ${IMAGE}
+                    imagePullPolicy: Always
+                    ports:
+                      - containerPort: ${PORT}
+                    env:
+                      - name: VS_AGENT_ADMIN_URL
+                        value: "http://${RELEASE_NAME}:3000"
+                      - name: ORG_VS_ADMIN_URL
+                        value: "http://organization:3000"
+                      - name: ORG_VS_PUBLIC_URL
+                        value: "https://organization.eafit.testnet.verana.network"
+                      - name: CHATBOT_PORT
+                        value: "${PORT}"
+                      - name: DATABASE_URL
+                        value: "postgresql://chatbot:${DB_PASSWORD}@${DB_NAME}:5432/chatbot"
+                      - name: SERVICE_NAME
+                        value: "${SERVICE_NAME}"
+                      - name: CUSTOM_SCHEMA_BASE_ID
+                        value: "${CUSTOM_SCHEMA_BASE_ID:-avatar-eafit}"
+                      - name: ENABLE_ANONCREDS
+                        value: "${ENABLE_ANONCREDS:-true}"
+                      - name: LOG_LEVEL
+                        value: "${LOG_LEVEL:-info}"
+                      - name: MINIO_ENDPOINT
+                        value: "${MINIO_NAME}"
+                      - name: MINIO_PORT
+                        value: "9000"
+                      - name: MINIO_ACCESS_KEY
+                        value: "${MINIO_AK}"
+                      - name: MINIO_SECRET_KEY
+                        value: "${MINIO_SK}"
+                      - name: MINIO_BUCKET
+                        value: "${MINIO_BUCKET}"
+                      - name: MINIO_USE_SSL
+                        value: "false"
+                      - name: MINIO_PUBLIC_URL
+                        value: "https://${MINIO_PUBLIC_HOST}"
+          ---
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: ${APP_NAME}
+            namespace: ${NAMESPACE}
+          spec:
+            selector:
+              app: ${APP_NAME}
+            ports:
+              - port: ${PORT}
+                targetPort: ${PORT}
+          EOF
+
+          kubectl rollout status deployment/"${APP_NAME}" -n "$NAMESPACE" --timeout=300s
+
       # -----------------------------------------------------------------------
       # CLEANUP
       # -----------------------------------------------------------------------
@@ -244,3 +556,9 @@ jobs:
             echo "- **VS Agent:** https://${INGRESS_HOST}/.well-known/did.json" >> "$GITHUB_STEP_SUMMARY"
           fi
           echo "- **Network:** testnet" >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "${ANONCREDS_CRED_DEF_ID:-}" ]; then
+            echo "- **Credential Definition:** ${ANONCREDS_CRED_DEF_ID}" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ "${{ inputs.step }}" = "deploy-chatbot" ] || [ "${{ inputs.step }}" = "all" ]; then
+            echo "- **Chatbot Image:** ${CHATBOT_IMAGE:-io2060/avatar-issuer-chatbot:latest}" >> "$GITHUB_STEP_SUMMARY"
+          fi
