@@ -140,6 +140,18 @@ Hologram is the messaging app where users interact with verifiable AI agents. Yo
 
 > Install the app on your phone. You will use it to scan QR codes and chat with your bot.
 
+### EAFIT Avatar Credential
+
+Your chatbot uses **credential-based authentication** — users must present a valid EAFIT Avatar credential to access the bot. You will need this credential to test your own agent.
+
+1. Open **Hologram Messaging** on your phone
+2. Navigate to https://avatar.eafit.testnet.verana.network/
+3. Scan the QR code and follow the prompts to obtain your **EAFIT Avatar credential**
+
+> This credential is stored in your Hologram wallet. You will present it each time you authenticate with an EAFIT agent.
+
+**Verify it works**: connect to the example agent at https://example-agent.eafit.testnet.verana.network/ — scan the QR code, authenticate with your EAFIT Avatar credential, and chat with the bot.
+
 ### kubectl (for Step 2)
 
 `kubectl` is the command-line tool for interacting with Kubernetes.
@@ -412,12 +424,11 @@ The script will:
 
 > The first time may take a few minutes while Docker images are downloaded.
 
-### 1.8. Start the full stack
+### 1.8. Start the chatbot stack
 
-Once setup is complete, start all services (chatbot, Redis, PostgreSQL):
+Once setup is complete, the VS Agent is already running. Now start the chatbot and its supporting services:
 
 ```bash
-export NGROK_DOMAIN=<your-ngrok-domain>   # shown by setup.sh
 export OPENAI_API_KEY=sk-...              # your LLM API key
 ./scripts/start.sh
 ```
@@ -426,10 +437,11 @@ This will start:
 
 | Service | Port | Description |
 |---------|------|-------------|
-| **vs-agent** | 3011 (public), 3010 (admin) | Communication with Hologram (DIDComm) |
 | **chatbot** | 3003 | Your AI agent (LLM, RAG, MCP) |
 | **redis** | 6379 | Memory and vector storage |
 | **postgres** | 5432 | Session database |
+
+> The **VS Agent** (ports 3010/3011) is already running from `setup.sh`. The chatbot connects to it automatically.
 
 Verify everything is running:
 
